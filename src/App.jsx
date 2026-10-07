@@ -242,7 +242,7 @@ function PublicGuestView() {
         </h1>
         <p className="text-lg font-semibold mt-1 text-cyan-100">100th Anniversary Celebration</p>
         <p className="text-lg font-semibold text-cyan-100 mt-1">Visions of Nembutsu — Hands Together, Hearts Forward</p>
-        
+
         <div className="mt-4 pt-3 border-t border-cyan-800/60 flex items-center justify-center gap-4 text-xs text-[#FDF7E7]">
           <a href="#/projector" target="_blank" rel="noreferrer" className="text-[#D4AF37] font-bold hover:underline flex items-center gap-1">
             <Tv className="w-3.5 h-3.5" /> Projector
@@ -413,10 +413,14 @@ function PublicGuestView() {
           <div className="grid grid-cols-1 gap-6">
             {photos.map((p) => {
               const reactions = p.reactions || []
+              const imageUrl = p.thumbnail_path.includes('?') 
+                ? `${p.thumbnail_path}&v=${new Date(p.created_at).getTime()}` 
+                : `${p.thumbnail_path}?v=${new Date(p.created_at).getTime()}`
+
               return (
                 <div key={p.id} className="bg-[#FDF7E7]/40 rounded-xl border border-amber-200/70 overflow-hidden shadow-sm">
                   <img
-                    src={`${p.thumbnail_path}?t=${new Date(p.created_at).getTime()}`}
+                    src={imageUrl}
                     alt="Centennial Celebration"
                     className="w-full max-h-[450px] object-cover"
                     loading="lazy"
@@ -602,6 +606,11 @@ function AdminView() {
   }
 
   const toggleApproval = async (photoId, currentStatus) => {
+    // Optimistic UI update
+    setPhotos((prev) =>
+      prev.map((p) => (p.id === photoId ? { ...p, is_approved: !currentStatus } : p))
+    )
+
     const { error } = await supabase
       .from('photos')
       .update({ is_approved: !currentStatus })
@@ -609,36 +618,38 @@ function AdminView() {
 
     if (error) {
       alert(`Error updating photo status: ${error.message}`)
-    } else {
-      await fetchAdminPhotos()
+      fetchAdminPhotos()
     }
   }
 
   const deletePhoto = async (photoId, storagePath) => {
     if (!confirm('Are you sure you want to permanently delete this photo?')) return
 
-    // 1. Delete associated photo_tags records first
-    await supabase.from('photo_tags').delete().eq('photo_id', photoId)
-
-    // 2. Delete associated reactions records
-    await supabase.from('reactions').delete().eq('photo_id', photoId)
-
-    // 3. Delete photo entry from database
-    const { error: dbErr } = await supabase.from('photos').delete().eq('id', photoId)
-
-    if (dbErr) {
-      alert(`Database delete error: ${dbErr.message}`)
-      return
-    }
-
-    // 4. Delete file from Supabase storage if storage_path exists
-    if (storagePath) {
-      await supabase.storage.from('raw-photos').remove([storagePath])
-    }
-
-    // 5. Instantly trigger state update
+    // Optimistic UI removal: immediately hide card and bounding box from Admin view
     setPhotos((prev) => prev.filter((p) => p.id !== photoId))
-    await fetchAdminPhotos()
+
+    try {
+      // 1. Clear foreign key dependencies
+      await supabase.from('photo_tags').delete().eq('photo_id', photoId)
+      await supabase.from('reactions').delete().eq('photo_id', photoId)
+
+      // 2. Delete main database row
+      const { error: dbErr } = await supabase.from('photos').delete().eq('id', photoId)
+
+      if (dbErr) {
+        alert(`Database delete error: ${dbErr.message}`)
+        fetchAdminPhotos()
+        return
+      }
+
+      // 3. Delete raw asset from storage bucket
+      if (storagePath) {
+        await supabase.storage.from('raw-photos').remove([storagePath])
+      }
+    } catch (err) {
+      console.error('Full Delete Error:', err)
+      fetchAdminPhotos()
+    }
   }
 
   if (!isAuthenticated) {
@@ -690,45 +701,51 @@ function AdminView() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {photos.map((p) => (
-              <div key={p.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm flex flex-col justify-between">
-                <div>
-                  <img
-                    src={`${p.thumbnail_path}?t=${new Date(p.created_at).getTime()}`}
-                    alt="Submission"
-                    className="w-full h-48 object-cover"
-                  />
-                  <div className="p-4">
-                    <p className="font-bold text-[#0C6285]">{p.uploader_name || 'Anonymous'}</p>
-                    <p className="text-xs text-gray-400">{new Date(p.created_at).toLocaleString()}</p>
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className={`px-2 py-0.5 text-xs font-bold rounded-md ${p.is_approved ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
-                        {p.is_approved ? 'Approved' : 'Pending'}
-                      </span>
+            {photos.map((p) => {
+              const imageUrl = p.thumbnail_path.includes('?') 
+                ? `${p.thumbnail_path}&v=${new Date(p.created_at).getTime()}` 
+                : `${p.thumbnail_path}?v=${new Date(p.created_at).getTime()}`
+
+              return (
+                <div key={p.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm flex flex-col justify-between">
+                  <div>
+                    <img
+                      src={imageUrl}
+                      alt="Submission"
+                      className="w-full h-48 object-cover"
+                    />
+                    <div className="p-4">
+                      <p className="font-bold text-[#0C6285]">{p.uploader_name || 'Anonymous'}</p>
+                      <p className="text-xs text-gray-400">{new Date(p.created_at).toLocaleString()}</p>
+                      <div className="mt-2 flex items-center gap-2">
+                        <span className={`px-2 py-0.5 text-xs font-bold rounded-md ${p.is_approved ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>
+                          {p.is_approved ? 'Approved' : 'Pending'}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="p-4 border-t border-gray-100 flex gap-2">
-                  <button
-                    onClick={() => toggleApproval(p.id, p.is_approved)}
-                    className={`flex-1 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1 cursor-pointer ${
-                      p.is_approved ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                    }`}
-                  >
-                    {p.is_approved ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
-                    {p.is_approved ? 'Unapprove' : 'Approve'}
-                  </button>
-                  <button
-                    onClick={() => deletePhoto(p.id, p.storage_path)}
-                    className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors cursor-pointer"
-                    title="Delete Photo"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="p-4 border-t border-gray-100 flex gap-2">
+                    <button
+                      onClick={() => toggleApproval(p.id, p.is_approved)}
+                      className={`flex-1 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1 cursor-pointer ${
+                        p.is_approved ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      }`}
+                    >
+                      {p.is_approved ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                      {p.is_approved ? 'Unapprove' : 'Approve'}
+                    </button>
+                    <button
+                      onClick={() => deletePhoto(p.id, p.storage_path)}
+                      className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors cursor-pointer"
+                      title="Delete Photo"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </main>
