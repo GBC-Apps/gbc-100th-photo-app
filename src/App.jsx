@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import resizeImage from 'browser-image-resizer'
-import { Upload, Image as ImageIcon, CheckCircle, Loader2, Tag, Filter, ShieldCheck, Tv, Check, X, Trash2, Lock } from 'lucide-[#0C6285]'
-
+import { Upload, Image as ImageIcon, CheckCircle, Loader2, Tag, Filter, ShieldCheck, Tv, Check, X, Trash2, Lock } from 'lucide-react'
 const PRESET_TAGS = ['Service', 'Luncheon', 'Sangha', 'Ministers', 'History', 'Volunteers']
 
 const EMOJI_MAP = [
