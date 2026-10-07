@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import resizeImage from 'browser-image-resizer'
 import { Upload, Image as ImageIcon, CheckCircle, Loader2, Tag, Filter, ShieldCheck, Tv, Check, X, Trash2, Lock } from 'lucide-react'
+
 const PRESET_TAGS = ['Service', 'Luncheon', 'Sangha', 'Ministers', 'History', 'Volunteers']
 
 const EMOJI_MAP = [
@@ -28,20 +29,12 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
-  if (route === '#/projector') {
-    return <ProjectorView />
-  }
-
-  if (route === '#/admin') {
-    return <AdminView />
-  }
+  if (route === '#/projector') return <ProjectorView />
+  if (route === '#/admin') return <AdminView />
 
   return <PublicGuestView />
 }
 
-/* ==========================================================================
-   1. PUBLIC GUEST VIEW (Upload & Live Feed)
-   ========================================================================== */
 function PublicGuestView() {
   const [selectedFiles, setSelectedFiles] = useState([])
   const [uploaderName, setUploaderName] = useState('')
@@ -128,7 +121,8 @@ function PublicGuestView() {
         if (existingTag) {
           tagIds.push(existingTag.id)
         } else {
-          const { data: newTag } = await supabase.from('tags').insert([{ name: tName }]).select('id').single()
+          const { data: newTag, error: tagErr } = await supabase.from('tags').insert([{ name: tName }]).select('id').single()
+          if (tagErr) console.warn('Tag Insert Warning:', tagErr)
           if (newTag) tagIds.push(newTag.id)
         }
       }
@@ -145,7 +139,11 @@ function PublicGuestView() {
         const { error: uploadError } = await supabase.storage
           .from('raw-photos')
           .upload(filePath, resizedBlob)
-        if (uploadError) throw uploadError
+
+        if (uploadError) {
+          console.error('Storage Error details:', uploadError)
+          throw uploadError
+        }
 
         const { data: publicUrlData } = supabase.storage
           .from('raw-photos')
@@ -164,7 +162,10 @@ function PublicGuestView() {
           .select()
           .single()
 
-        if (dbError) throw dbError
+        if (dbError) {
+          console.error('Database Photo Insert Error:', dbError)
+          throw dbError
+        }
 
         if (tagIds.length > 0 && photoRecord) {
           const photoTagInserts = tagIds.map(tId => ({
@@ -182,8 +183,8 @@ function PublicGuestView() {
       setProgress('')
       fetchPhotos()
     } catch (err) {
-      console.error('Upload Error:', err)
-      alert('An error occurred during upload. Please try again.')
+      console.error('Full Upload Error Object:', err)
+      alert(`Upload error: ${err.message || 'Please check Supabase Storage RLS policies.'}`)
     } finally {
       setUploading(false)
     }
@@ -259,13 +260,14 @@ function PublicGuestView() {
                     key={tag}
                     type="button"
                     onClick={() => toggleUploadTag(tag)}
-                    className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
-                      isSelected
-                        ? 'bg-[#0C6285] text-white shadow'
-                        : 'bg-amber-100/60 text-[#0C6285] hover:bg-amber-200'
-                    }`}
+                    style={{
+                      backgroundColor: isSelected ? '#0C6285' : '#FEF3C7',
+                      color: isSelected ? '#FFFFFF' : '#0C6285',
+                      border: isSelected ? '2px solid #D4AF37' : '1px solid #FCD34D'
+                    }}
+                    className="px-3.5 py-2 rounded-lg text-sm font-bold transition-all shadow-xs cursor-pointer"
                   >
-                    #{tag}
+                    #{tag} {isSelected && '✓'}
                   </button>
                 )
               })}
@@ -311,7 +313,8 @@ function PublicGuestView() {
           <button
             type="submit"
             disabled={uploading || selectedFiles.length === 0}
-            className="w-full bg-[#0C6285] hover:bg-[#08425a] active:bg-[#052c3c] text-white font-bold text-lg py-4 rounded-xl shadow-md border-b-4 border-[#08425a] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[52px]"
+            style={{ backgroundColor: '#0C6285', color: '#FFFFFF' }}
+            className="w-full hover:opacity-95 font-bold text-lg py-4 rounded-xl shadow-md border-b-4 border-[#08425a] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 min-h-[52px]"
           >
             {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Upload className="w-5 h-5" />}
             Submit Photos
@@ -319,7 +322,7 @@ function PublicGuestView() {
         </form>
       </main>
 
-      {/* Community Feed Section */}
+      {/* Community Feed */}
       <section className="w-full max-w-2xl bg-white rounded-2xl shadow-lg border border-amber-200/60 p-6 sm:p-8">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b">
           <h2 className="text-xl font-bold text-[#0C6285] flex items-center gap-2">
@@ -329,11 +332,11 @@ function PublicGuestView() {
           <div className="flex flex-wrap gap-1.5">
             <button
               onClick={() => setActiveFilterTag('ALL')}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold ${
-                activeFilterTag === 'ALL'
-                  ? 'bg-[#0C6285] text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              style={{
+                backgroundColor: activeFilterTag === 'ALL' ? '#0C6285' : '#F3F4F6',
+                color: activeFilterTag === 'ALL' ? '#FFFFFF' : '#374151'
+              }}
+              className="px-3 py-1.5 rounded-full text-xs font-bold"
             >
               All Photos
             </button>
@@ -341,11 +344,11 @@ function PublicGuestView() {
               <button
                 key={t}
                 onClick={() => setActiveFilterTag(t)}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold ${
-                  activeFilterTag === t
-                    ? 'bg-[#0C6285] text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
+                style={{
+                  backgroundColor: activeFilterTag === t ? '#0C6285' : '#F3F4F6',
+                  color: activeFilterTag === t ? '#FFFFFF' : '#374151'
+                }}
+                className="px-3 py-1.5 rounded-full text-xs font-bold"
               >
                 #{t}
               </button>
@@ -399,7 +402,7 @@ function PublicGuestView() {
                             <button
                               key={e.type}
                               onClick={() => handleAddReaction(p.id, e.type)}
-                              className="px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 hover:border-[#D4AF37] hover:bg-amber-50 text-sm flex items-center gap-1 shadow-xs transition-all active:scale-95"
+                              className="px-2.5 py-1.5 rounded-lg bg-white border border-gray-200 hover:border-[#D4AF37] hover:bg-amber-50 text-sm flex items-center gap-1 shadow-xs transition-all active:scale-95 cursor-pointer"
                               title={e.label}
                             >
                               <span>{e.symbol}</span>
@@ -424,16 +427,12 @@ function PublicGuestView() {
   )
 }
 
-/* ==========================================================================
-   2. LIVE PROJECTOR SLIDESHOW VIEW (#/projector)
-   ========================================================================== */
 function ProjectorView() {
   const [slides, setSlides] = useState([])
   const [currentIndex, setCurrentIndex] = useState(0)
 
   useEffect(() => {
     fetchSlides()
-
     const channel = supabase
       .channel('projector-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'photos' }, () => fetchSlides())
@@ -442,7 +441,6 @@ function ProjectorView() {
     return () => supabase.removeChannel(channel)
   }, [])
 
-  // Auto-advance slide every 7 seconds
   useEffect(() => {
     if (slides.length <= 1) return
     const timer = setInterval(() => {
@@ -458,9 +456,7 @@ function ProjectorView() {
       .eq('is_approved', true)
       .order('created_at', { ascending: false })
 
-    if (data && data.length > 0) {
-      setSlides(data)
-    }
+    if (data && data.length > 0) setSlides(data)
   }
 
   if (slides.length === 0) {
@@ -476,7 +472,6 @@ function ProjectorView() {
 
   return (
     <div className="w-screen h-screen bg-black overflow-hidden relative flex flex-col justify-between">
-      {/* Top Banner overlay */}
       <div className="absolute top-0 inset-x-0 bg-gradient-to-b from-black/80 to-transparent p-6 z-10 flex items-center justify-between text-white">
         <div>
           <h1 className="text-2xl font-serif font-bold text-[#D4AF37]">Gardena Buddhist Church</h1>
@@ -487,7 +482,6 @@ function ProjectorView() {
         </div>
       </div>
 
-      {/* Main Image Slideshow */}
       <div className="w-full h-full flex items-center justify-center p-8 pt-20 pb-24">
         <img
           key={currentPhoto.id}
@@ -497,7 +491,6 @@ function ProjectorView() {
         />
       </div>
 
-      {/* Bottom Info Bar */}
       <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-6 z-10 flex items-center justify-between text-white">
         <div>
           <p className="text-xs text-gray-400">Photo shared by</p>
@@ -518,17 +511,13 @@ function ProjectorView() {
   )
 }
 
-/* ==========================================================================
-   3. ADMIN MODERATION PORTAL (#/admin)
-   ========================================================================== */
 function AdminView() {
   const [pin, setPin] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [photos, setPhotos] = useState([])
   const [loading, setLoading] = useState(false)
 
-  // Demo passcode for temple staff moderation
-  const ADMIN_PIN = '1926' // Centennial founding year passcode
+  const ADMIN_PIN = '1926'
 
   const handleLogin = (e) => {
     e.preventDefault()
@@ -582,7 +571,8 @@ function AdminView() {
           />
           <button
             type="submit"
-            className="w-full bg-[#0C6285] hover:bg-[#08425a] text-white font-bold py-3 rounded-xl transition-colors"
+            style={{ backgroundColor: '#0C6285', color: '#FFFFFF' }}
+            className="w-full hover:opacity-95 font-bold py-3 rounded-xl transition-colors"
           >
             Authenticate
           </button>
