@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import { Upload, Image as ImageIcon, CheckCircle, Loader2, Tag, Filter, ShieldCheck, Tv, Check, X, Trash2, Lock } from 'lucide-react'
+import { Upload, Image as ImageIcon, CheckCircle, Loader2, Tag, Filter, ShieldCheck, Tv, Check, X, Trash2, Lock, RotateCcw } from 'lucide-react'
 
 const PRESET_TAGS = ['Service', 'Luncheon', 'Sangha', 'Ministers', 'History', 'Volunteers']
 
@@ -12,7 +12,7 @@ const EMOJI_MAP = [
   { type: 'smile', symbol: '😊', label: 'Smile' }
 ]
 
-// Native Browser Canvas Image Resizer (Fixes Vite ESM bundle error)
+// Native Browser Canvas Image Resizer
 const compressImageNative = (file, maxWidth = 1920, maxHeight = 1080, quality = 0.8) => {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -137,6 +137,11 @@ function PublicGuestView() {
     }
   }
 
+  const handleClearSelection = () => {
+    setSelectedFiles([])
+    setSuccess(false)
+  }
+
   const handleUpload = async (e) => {
     e.preventDefault()
     if (selectedFiles.length === 0) return
@@ -230,22 +235,22 @@ function PublicGuestView() {
 
   return (
     <div className="min-h-screen bg-[#FDF7E7] text-gray-800 flex flex-col items-center justify-start p-4 sm:p-6">
+      {/* Header Banner */}
       <header className="w-full max-w-2xl bg-[#0C6285] text-white p-6 rounded-2xl shadow-xl border-b-4 border-[#D4AF37] text-center mb-6 relative">
         <h1 className="text-2xl sm:text-3xl font-serif font-bold tracking-wide text-[#D4AF37]">
           Gardena Buddhist Church
         </h1>
         <p className="text-lg font-semibold mt-1 text-cyan-100">100th Anniversary Celebration</p>
-        <div className="mt-3 pt-3 border-t border-cyan-800/60 flex items-center justify-between text-xs text-[#FDF7E7] px-2">
-          <span>Visions of Nembutsu — Hands Together, Hearts Forward</span>
-          <div className="flex gap-2">
-            <a href="#/projector" target="_blank" rel="noreferrer" className="text-[#D4AF37] font-bold hover:underline flex items-center gap-1">
-              <Tv className="w-3.5 h-3.5" /> Projector
-            </a>
-            <span>•</span>
-            <a href="#/admin" className="text-cyan-200 hover:underline flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5" /> Admin
-            </a>
-          </div>
+        <p className="text-lg font-semibold text-cyan-100 mt-1">Visions of Nembutsu — Hands Together, Hearts Forward</p>
+        
+        <div className="mt-4 pt-3 border-t border-cyan-800/60 flex items-center justify-center gap-4 text-xs text-[#FDF7E7]">
+          <a href="#/projector" target="_blank" rel="noreferrer" className="text-[#D4AF37] font-bold hover:underline flex items-center gap-1">
+            <Tv className="w-3.5 h-3.5" /> Projector
+          </a>
+          <span>•</span>
+          <a href="#/admin" className="text-cyan-200 hover:underline flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5" /> Admin Portal
+          </a>
         </div>
       </header>
 
@@ -260,7 +265,19 @@ function PublicGuestView() {
 
         <form onSubmit={handleUpload} className="space-y-6">
           <div>
-            <label className="block text-sm font-bold text-gray-700 mb-2">Select Photos</label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-bold text-gray-700">Select Photos</label>
+              {selectedFiles.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearSelection}
+                  className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Clear Selection
+                </button>
+              )}
+            </div>
+
             <div className="relative border-2 border-dashed border-[#0C6285]/40 hover:border-[#0C6285] rounded-xl p-6 text-center bg-[#FDF7E7]/50 transition-colors cursor-pointer">
               <input
                 type="file"
@@ -353,36 +370,34 @@ function PublicGuestView() {
 
       {/* Community Feed */}
       <section className="w-full max-w-2xl bg-white rounded-2xl shadow-lg border border-amber-200/60 p-6 sm:p-8">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b">
-          <h2 className="text-xl font-bold text-[#0C6285] flex items-center gap-2">
-            <Filter className="w-5 h-5 text-[#D4AF37]" /> Centennial Photo Feed
-          </h2>
+        <h2 className="text-xl font-bold text-[#0C6285] mb-4 flex items-center gap-2">
+          <Filter className="w-6 h-6 text-[#D4AF37]" /> Centennial Photo Feed
+        </h2>
 
-          <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 mb-6 pb-4 border-b">
+          <button
+            onClick={() => setActiveFilterTag('ALL')}
+            style={{
+              backgroundColor: activeFilterTag === 'ALL' ? '#0C6285' : '#F3F4F6',
+              color: activeFilterTag === 'ALL' ? '#FFFFFF' : '#374151'
+            }}
+            className="px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer transition-all"
+          >
+            All Photos
+          </button>
+          {PRESET_TAGS.map((t) => (
             <button
-              onClick={() => setActiveFilterTag('ALL')}
+              key={t}
+              onClick={() => setActiveFilterTag(t)}
               style={{
-                backgroundColor: activeFilterTag === 'ALL' ? '#0C6285' : '#F3F4F6',
-                color: activeFilterTag === 'ALL' ? '#FFFFFF' : '#374151'
+                backgroundColor: activeFilterTag === t ? '#0C6285' : '#F3F4F6',
+                color: activeFilterTag === t ? '#FFFFFF' : '#374151'
               }}
-              className="px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer"
+              className="px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer transition-all"
             >
-              All Photos
+              #{t}
             </button>
-            {PRESET_TAGS.map((t) => (
-              <button
-                key={t}
-                onClick={() => setActiveFilterTag(t)}
-                style={{
-                  backgroundColor: activeFilterTag === t ? '#0C6285' : '#F3F4F6',
-                  color: activeFilterTag === t ? '#FFFFFF' : '#374151'
-                }}
-                className="px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer"
-              >
-                #{t}
-              </button>
-            ))}
-          </div>
+          ))}
         </div>
 
         {loadingPhotos ? (
@@ -401,7 +416,7 @@ function PublicGuestView() {
               return (
                 <div key={p.id} className="bg-[#FDF7E7]/40 rounded-xl border border-amber-200/70 overflow-hidden shadow-sm">
                   <img
-                    src={p.thumbnail_path}
+                    src={`${p.thumbnail_path}?t=${new Date(p.created_at).getTime()}`}
                     alt="Centennial Celebration"
                     className="w-full max-h-[450px] object-cover"
                     loading="lazy"
@@ -548,6 +563,19 @@ function AdminView() {
 
   const ADMIN_PIN = '1926'
 
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const channel = supabase
+      .channel('admin-realtime-photos')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'photos' }, () => fetchAdminPhotos())
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [isAuthenticated])
+
   const handleLogin = (e) => {
     e.preventDefault()
     if (pin === ADMIN_PIN) {
@@ -560,28 +588,57 @@ function AdminView() {
 
   const fetchAdminPhotos = async () => {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('photos')
       .select('*, photo_tags(tags(name))')
       .order('created_at', { ascending: false })
 
-    if (data) setPhotos(data)
+    if (error) {
+      console.error('Error fetching admin photos:', error)
+    } else if (data) {
+      setPhotos([...data])
+    }
     setLoading(false)
   }
 
   const toggleApproval = async (photoId, currentStatus) => {
-    await supabase.from('photos').update({ is_approved: !currentStatus }).eq('id', photoId)
-    fetchAdminPhotos()
+    const { error } = await supabase
+      .from('photos')
+      .update({ is_approved: !currentStatus })
+      .eq('id', photoId)
+
+    if (error) {
+      alert(`Error updating photo status: ${error.message}`)
+    } else {
+      await fetchAdminPhotos()
+    }
   }
 
   const deletePhoto = async (photoId, storagePath) => {
     if (!confirm('Are you sure you want to permanently delete this photo?')) return
 
-    await supabase.from('photos').delete().eq('id', photoId)
+    // 1. Delete associated photo_tags records first
+    await supabase.from('photo_tags').delete().eq('photo_id', photoId)
+
+    // 2. Delete associated reactions records
+    await supabase.from('reactions').delete().eq('photo_id', photoId)
+
+    // 3. Delete photo entry from database
+    const { error: dbErr } = await supabase.from('photos').delete().eq('id', photoId)
+
+    if (dbErr) {
+      alert(`Database delete error: ${dbErr.message}`)
+      return
+    }
+
+    // 4. Delete file from Supabase storage if storage_path exists
     if (storagePath) {
       await supabase.storage.from('raw-photos').remove([storagePath])
     }
-    fetchAdminPhotos()
+
+    // 5. Instantly trigger state update
+    setPhotos((prev) => prev.filter((p) => p.id !== photoId))
+    await fetchAdminPhotos()
   }
 
   if (!isAuthenticated) {
@@ -623,16 +680,24 @@ function AdminView() {
       </header>
 
       <main className="max-w-6xl mx-auto">
-        {loading ? (
+        {loading && photos.length === 0 ? (
           <div className="text-center py-12">
             <Loader2 className="w-8 h-8 animate-spin mx-auto text-[#0C6285]" />
+          </div>
+        ) : photos.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            No photos uploaded yet.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {photos.map((p) => (
               <div key={p.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm flex flex-col justify-between">
                 <div>
-                  <img src={p.thumbnail_path} alt="Submission" className="w-full h-48 object-cover" />
+                  <img
+                    src={`${p.thumbnail_path}?t=${new Date(p.created_at).getTime()}`}
+                    alt="Submission"
+                    className="w-full h-48 object-cover"
+                  />
                   <div className="p-4">
                     <p className="font-bold text-[#0C6285]">{p.uploader_name || 'Anonymous'}</p>
                     <p className="text-xs text-gray-400">{new Date(p.created_at).toLocaleString()}</p>
