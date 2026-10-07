@@ -1,0 +1,10 @@
+@tailwindcss base;
+@tailwindcss components;
+@tailwindcss utilities;
+
+body {
+  background-color: #FDF7E7;
+  color: #1F2937;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
