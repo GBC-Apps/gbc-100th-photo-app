@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
+    "@tailwindcss/postcss": "^4.3.3",
     "browser-image-resizer": "^2.4.1",
     "lucide-react": "^1.52.0",
     "react": "^19.2.8",
