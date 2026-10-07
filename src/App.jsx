@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import resizeImage from 'browser-image-resizer'
 import { Upload, Image as ImageIcon, CheckCircle, Loader2, Tag, Filter, ShieldCheck, Tv, Check, X, Trash2, Lock } from 'lucide-react'
 
 const PRESET_TAGS = ['Service', 'Luncheon', 'Sangha', 'Ministers', 'History', 'Volunteers']
@@ -13,11 +12,47 @@ const EMOJI_MAP = [
   { type: 'smile', symbol: '😊', label: 'Smile' }
 ]
 
-const compressionConfig = {
-  quality: 0.8,
-  maxWidth: 1920,
-  maxHeight: 1080,
-  autoRotate: true
+// Native Browser Canvas Image Resizer (Fixes Vite ESM bundle error)
+const compressImageNative = (file, maxWidth = 1920, maxHeight = 1080, quality = 0.8) => {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.src = URL.createObjectURL(file)
+    img.onload = () => {
+      let width = img.width
+      let height = img.height
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width)
+          width = maxWidth
+        }
+      } else {
+        if (height > maxHeight) {
+          width = Math.round((width * maxHeight) / height)
+          height = maxHeight
+        }
+      }
+
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0, width, height)
+
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve(blob)
+          } else {
+            reject(new Error('Canvas compression failed'))
+          }
+        },
+        'image/jpeg',
+        quality
+      )
+    }
+    img.onerror = (err) => reject(err)
+  })
 }
 
 export default function App() {
@@ -129,21 +164,18 @@ function PublicGuestView() {
 
       for (let i = 0; i < selectedFiles.length; i++) {
         const file = selectedFiles[i]
-        setProgress(`Compressing and uploading photo ${i + 1} of ${selectedFiles.length}...`)
+        setProgress(`Optimizing and uploading photo ${i + 1} of ${selectedFiles.length}...`)
 
-        const resizedBlob = await resizeImage(file, compressionConfig)
-        const fileExt = file.name.split('.').pop()
+        const compressedBlob = await compressImageNative(file)
+        const fileExt = file.name.split('.').pop() || 'jpg'
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`
         const filePath = `uploads/${fileName}`
 
         const { error: uploadError } = await supabase.storage
           .from('raw-photos')
-          .upload(filePath, resizedBlob)
+          .upload(filePath, compressedBlob, { contentType: 'image/jpeg' })
 
-        if (uploadError) {
-          console.error('Storage Error details:', uploadError)
-          throw uploadError
-        }
+        if (uploadError) throw uploadError
 
         const { data: publicUrlData } = supabase.storage
           .from('raw-photos')
@@ -162,10 +194,7 @@ function PublicGuestView() {
           .select()
           .single()
 
-        if (dbError) {
-          console.error('Database Photo Insert Error:', dbError)
-          throw dbError
-        }
+        if (dbError) throw dbError
 
         if (tagIds.length > 0 && photoRecord) {
           const photoTagInserts = tagIds.map(tId => ({
@@ -183,8 +212,8 @@ function PublicGuestView() {
       setProgress('')
       fetchPhotos()
     } catch (err) {
-      console.error('Full Upload Error Object:', err)
-      alert(`Upload error: ${err.message || 'Please check Supabase Storage RLS policies.'}`)
+      console.error('Full Upload Error:', err)
+      alert(`Upload error: ${err.message || 'Error processing image upload'}`)
     } finally {
       setUploading(false)
     }
@@ -336,7 +365,7 @@ function PublicGuestView() {
                 backgroundColor: activeFilterTag === 'ALL' ? '#0C6285' : '#F3F4F6',
                 color: activeFilterTag === 'ALL' ? '#FFFFFF' : '#374151'
               }}
-              className="px-3 py-1.5 rounded-full text-xs font-bold"
+              className="px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer"
             >
               All Photos
             </button>
@@ -348,7 +377,7 @@ function PublicGuestView() {
                   backgroundColor: activeFilterTag === t ? '#0C6285' : '#F3F4F6',
                   color: activeFilterTag === t ? '#FFFFFF' : '#374151'
                 }}
-                className="px-3 py-1.5 rounded-full text-xs font-bold"
+                className="px-3 py-1.5 rounded-full text-xs font-bold cursor-pointer"
               >
                 #{t}
               </button>
@@ -572,7 +601,7 @@ function AdminView() {
           <button
             type="submit"
             style={{ backgroundColor: '#0C6285', color: '#FFFFFF' }}
-            className="w-full hover:opacity-95 font-bold py-3 rounded-xl transition-colors"
+            className="w-full hover:opacity-95 font-bold py-3 rounded-xl transition-colors cursor-pointer"
           >
             Authenticate
           </button>
@@ -618,7 +647,7 @@ function AdminView() {
                 <div className="p-4 border-t border-gray-100 flex gap-2">
                   <button
                     onClick={() => toggleApproval(p.id, p.is_approved)}
-                    className={`flex-1 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1 ${
+                    className={`flex-1 py-2 px-3 rounded-lg font-bold text-xs flex items-center justify-center gap-1 cursor-pointer ${
                       p.is_approved ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-emerald-600 text-white hover:bg-emerald-700'
                     }`}
                   >
@@ -627,7 +656,7 @@ function AdminView() {
                   </button>
                   <button
                     onClick={() => deletePhoto(p.id, p.storage_path)}
-                    className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+                    className="p-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors cursor-pointer"
                     title="Delete Photo"
                   >
                     <Trash2 className="w-4 h-4" />
