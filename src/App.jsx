@@ -747,30 +747,32 @@ function AdminView() {
   }
 
   const deletePhoto = async (photoId, storagePath) => {
-    if (!confirm('Are you sure you want to permanently delete this photo?')) return
+  if (!confirm('Are you sure you want to permanently delete this photo?')) return
 
-    setPhotos((prev) => prev.filter((p) => p.id !== photoId))
+  try {
+    // 1. Remove related database dependencies
+    await supabase.from('photo_tags').delete().eq('photo_id', photoId)
+    await supabase.from('reactions').delete().eq('photo_id', photoId)
 
-    try {
-      await supabase.from('photo_tags').delete().eq('photo_id', photoId)
-      await supabase.from('reactions').delete().eq('photo_id', photoId)
+    // 2. Delete the row from the photos database table
+    const { error: dbErr } = await supabase.from('photos').delete().eq('id', photoId)
 
-      const { error: dbErr } = await supabase.from('photos').delete().eq('id', photoId)
-
-      if (dbErr) {
-        alert(`Database delete error: ${dbErr.message}`)
-        fetchAdminPhotos()
-        return
-      }
-
-      if (storagePath) {
-        await supabase.storage.from('raw-photos').remove([storagePath])
-      }
-    } catch (err) {
-      console.error('Full Delete Error:', err)
-      fetchAdminPhotos()
+    if (dbErr) {
+      alert(`Database delete failed: ${dbErr.message}`)
+      return
     }
+
+    // 3. Delete the file from Supabase storage
+    if (storagePath) {
+      await supabase.storage.from('raw-photos').remove([storagePath])
+    }
+
+    // 4. Update UI state only after successful database deletion
+    setPhotos((prev) => prev.filter((p) => p.id !== photoId))
+  } catch (err) {
+    console.error('Delete Error:', err)
   }
+} 
 
   if (!isAuthenticated) {
     return (
