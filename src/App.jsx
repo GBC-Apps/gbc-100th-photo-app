@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
-import { Upload, Image as ImageIcon, CheckCircle, Loader2, Tag, Filter, ShieldCheck, Tv, Check, X, Trash2, Lock, RotateCcw } from 'lucide-react'
+import { Upload, Image as ImageIcon, CheckCircle, Loader2, Tag, Filter, ShieldCheck, Tv, Check, X, Trash2, Lock, RotateCcw, Search, ArrowUpDown } from 'lucide-react'
 
 const PRESET_TAGS = ['Service', 'Luncheon', 'Sangha', 'Ministers', 'History', 'Volunteers']
 
@@ -71,6 +71,7 @@ export default function App() {
 }
 
 function PublicGuestView() {
+  // Form state
   const [selectedFiles, setSelectedFiles] = useState([])
   const [uploaderName, setUploaderName] = useState('')
   const [selectedTags, setSelectedTags] = useState([])
@@ -79,9 +80,13 @@ function PublicGuestView() {
   const [progress, setProgress] = useState('')
   const [success, setSuccess] = useState(false)
 
+  // Feed, Filter, Search, and Sort State
   const [photos, setPhotos] = useState([])
   const [activeFilterTag, setActiveFilterTag] = useState('ALL')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState('NEWEST')
   const [loadingPhotos, setLoadingPhotos] = useState(true)
+  const [brokenImageIds, setBrokenImageIds] = useState(new Set())
 
   useEffect(() => {
     fetchPhotos()
@@ -95,7 +100,7 @@ function PublicGuestView() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [activeFilterTag])
+  }, [])
 
   const fetchPhotos = async () => {
     setLoadingPhotos(true)
@@ -114,13 +119,7 @@ function PublicGuestView() {
       if (error) throw error
 
       if (photosData) {
-        let filtered = photosData
-        if (activeFilterTag !== 'ALL') {
-          filtered = photosData.filter(p =>
-            p.photo_tags?.some(pt => pt.tags?.name === activeFilterTag)
-          )
-        }
-        setPhotos(filtered)
+        setPhotos(photosData)
       }
     } catch (err) {
       console.error('Error fetching gallery:', err)
@@ -129,9 +128,67 @@ function PublicGuestView() {
     }
   }
 
+  // Calculate Popular Tags (>5 uses)
+  const tagCounts = {}
+  photos.forEach((photo) => {
+    photo.photo_tags?.forEach((pt) => {
+      const tagName = pt.tags?.name
+      if (tagName) {
+        tagCounts[tagName] = (tagCounts[tagName] || 0) + 1
+      }
+    })
+  })
+
+  const popularCustomTags = Object.keys(tagCounts).filter(
+    (tName) => !PRESET_TAGS.includes(tName) && tagCounts[tName] >= 5
+  )
+
+  const allAvailableFilterTags = [...PRESET_TAGS, ...popularCustomTags]
+
+  // Filter & Search Logic
+  const getProcessedPhotos = () => {
+    let list = photos.filter((p) => {
+      // Exclude missing or broken image containers
+      if (brokenImageIds.has(p.id)) return false
+
+      // Tag Filter
+      const matchesTag =
+        activeFilterTag === 'ALL' ||
+        p.photo_tags?.some((pt) => pt.tags?.name === activeFilterTag)
+
+      // Search Query Filter (Uploader name & tags)
+      const q = searchQuery.toLowerCase().trim()
+      const matchesSearch =
+        !q ||
+        p.uploader_name?.toLowerCase().includes(q) ||
+        p.photo_tags?.some((pt) => pt.tags?.name?.toLowerCase().includes(q))
+
+      return matchesTag && matchesSearch
+    })
+
+    // Sorting Logic
+    return list.sort((a, b) => {
+      if (sortBy === 'NEWEST') {
+        return new Date(b.created_at) - new Date(a.created_at)
+      }
+      if (sortBy === 'OLDEST') {
+        return new Date(a.created_at) - new Date(b.created_at)
+      }
+      if (sortBy === 'MOST_LIKED') {
+        const countA = a.reactions ? a.reactions.length : 0
+        const countB = b.reactions ? b.reactions.length : 0
+        if (countB !== countA) return countB - countA
+        return new Date(b.created_at) - new Date(a.created_at)
+      }
+      return 0
+    })
+  }
+
+  const processedPhotos = getProcessedPhotos()
+
   const toggleUploadTag = (tagName) => {
     if (selectedTags.includes(tagName)) {
-      setSelectedTags(selectedTags.filter(t => t !== tagName))
+      setSelectedTags(selectedTags.filter((t) => t !== tagName))
     } else {
       setSelectedTags([...selectedTags, tagName])
     }
@@ -157,11 +214,21 @@ function PublicGuestView() {
 
       const tagIds = []
       for (const tName of finalTags) {
-        const { data: existingTag } = await supabase.from('tags').select('id').eq('name', tName).single()
+        const { data: existingTag } = await supabase
+          .from('tags')
+          .select('id')
+          .eq('name', tName)
+          .single()
+
         if (existingTag) {
           tagIds.push(existingTag.id)
         } else {
-          const { data: newTag, error: tagErr } = await supabase.from('tags').insert([{ name: tName }]).select('id').single()
+          const { data: newTag, error: tagErr } = await supabase
+            .from('tags')
+            .insert([{ name: tName }])
+            .select('id')
+            .single()
+
           if (tagErr) console.warn('Tag Insert Warning:', tagErr)
           if (newTag) tagIds.push(newTag.id)
         }
@@ -202,7 +269,7 @@ function PublicGuestView() {
         if (dbError) throw dbError
 
         if (tagIds.length > 0 && photoRecord) {
-          const photoTagInserts = tagIds.map(tId => ({
+          const photoTagInserts = tagIds.map((tId) => ({
             photo_id: photoRecord.id,
             tag_id: tId
           }))
@@ -283,7 +350,10 @@ function PublicGuestView() {
                 type="file"
                 multiple
                 accept="image/*"
-                onChange={(e) => { setSelectedFiles(Array.from(e.target.files)); setSuccess(false) }}
+                onChange={(e) => {
+                  setSelectedFiles(Array.from(e.target.files))
+                  setSuccess(false)
+                }}
                 disabled={uploading}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
               />
@@ -323,7 +393,7 @@ function PublicGuestView() {
               type="text"
               value={customTag}
               onChange={(e) => setCustomTag(e.target.value)}
-              placeholder="Add custom tag (e.g. #Hondo, #DharmaSchool)"
+              placeholder="Add custom tag (e.g. #Hondo, #Kinnara, #Gagaku)"
               className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0C6285]"
             />
           </div>
@@ -374,6 +444,42 @@ function PublicGuestView() {
           <Filter className="w-6 h-6 text-[#D4AF37]" /> Centennial Photo Feed
         </h2>
 
+        {/* Search Bar & Sort Selection Row */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 absolute left-3.5 top-3 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name or custom tag..."
+              className="w-full pl-10 pr-8 py-2 text-sm rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0C6285]"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-2.5 text-xs text-gray-400 hover:text-gray-600 font-bold"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <ArrowUpDown className="w-4 h-4 text-[#0C6285]" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-3 py-2 text-sm font-semibold rounded-xl border border-gray-300 bg-white text-[#0C6285] focus:outline-none focus:ring-2 focus:ring-[#0C6285] cursor-pointer"
+            >
+              <option value="NEWEST">Newest First</option>
+              <option value="OLDEST">Oldest First</option>
+              <option value="MOST_LIKED">Most Appreciated</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Dynamic Tag Filter Bar */}
         <div className="flex flex-wrap gap-1.5 mb-6 pb-4 border-b">
           <button
             onClick={() => setActiveFilterTag('ALL')}
@@ -385,56 +491,80 @@ function PublicGuestView() {
           >
             All Photos
           </button>
-          {PRESET_TAGS.map((t) => (
-            <button
-              key={t}
-              onClick={() => setActiveFilterTag(t)}
-              style={{
-                backgroundColor: activeFilterTag === t ? '#0C6285' : '#F3F4F6',
-                color: activeFilterTag === t ? '#FFFFFF' : '#374151'
-              }}
-              className="px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer transition-all"
-            >
-              #{t}
-            </button>
-          ))}
+
+          {allAvailableFilterTags.map((t) => {
+            const isPopular = popularCustomTags.includes(t)
+            const count = tagCounts[t] || 0
+
+            return (
+              <button
+                key={t}
+                onClick={() => setActiveFilterTag(t)}
+                style={{
+                  backgroundColor: activeFilterTag === t ? '#0C6285' : isPopular ? '#FEF3C7' : '#F3F4F6',
+                  color: activeFilterTag === t ? '#FFFFFF' : '#374151',
+                  border: isPopular && activeFilterTag !== t ? '1px solid #D4AF37' : 'none'
+                }}
+                className="px-3.5 py-1.5 rounded-full text-xs font-bold cursor-pointer transition-all flex items-center gap-1"
+              >
+                {isPopular && <span>⭐</span>}
+                #{t} {isPopular && <span className="opacity-75">({count})</span>}
+              </button>
+            )
+          })}
         </div>
 
+        {/* Gallery List */}
         {loadingPhotos ? (
           <div className="text-center py-12 text-gray-500 flex flex-col items-center gap-2">
             <Loader2 className="w-8 h-8 animate-spin text-[#0C6285]" />
             <span>Loading Centennial photos...</span>
           </div>
-        ) : photos.length === 0 ? (
+        ) : processedPhotos.length === 0 ? (
           <div className="text-center py-12 text-gray-500">
-            No photos found for this tag yet. Be the first to upload one!
+            No photos match your current selection or search term.
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6">
-            {photos.map((p) => {
+            {processedPhotos.map((p) => {
               const reactions = p.reactions || []
-              const imageUrl = p.thumbnail_path.includes('?') 
-                ? `${p.thumbnail_path}&v=${new Date(p.created_at).getTime()}` 
+              const imageUrl = p.thumbnail_path.includes('?')
+                ? `${p.thumbnail_path}&v=${new Date(p.created_at).getTime()}`
                 : `${p.thumbnail_path}?v=${new Date(p.created_at).getTime()}`
 
               return (
-                <div key={p.id} className="bg-[#FDF7E7]/40 rounded-xl border border-amber-200/70 overflow-hidden shadow-sm">
+                <div
+                  key={p.id}
+                  className="bg-[#FDF7E7]/40 rounded-xl border border-amber-200/70 overflow-hidden shadow-sm"
+                >
                   <img
                     src={imageUrl}
                     alt="Centennial Celebration"
                     className="w-full max-h-[450px] object-cover"
                     loading="lazy"
+                    onError={() => {
+                      // Automatically purge bounding container if storage asset is missing or deleted
+                      setBrokenImageIds((prev) => new Set(prev).add(p.id))
+                    }}
                   />
                   <div className="p-4">
                     <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
                       <span className="font-semibold text-[#0C6285]">{p.uploader_name}</span>
-                      <span>{new Date(p.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <span>
+                        {new Date(p.created_at).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
                     </div>
 
                     {p.photo_tags && p.photo_tags.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-3">
                         {p.photo_tags.map((pt, idx) => (
-                          <span key={idx} className="text-xs bg-amber-100 text-[#0C6285] px-2 py-0.5 rounded-md font-semibold">
+                          <span
+                            key={idx}
+                            className="text-xs bg-amber-100 text-[#0C6285] px-2 py-0.5 rounded-md font-semibold"
+                          >
                             #{pt.tags?.name}
                           </span>
                         ))}
@@ -445,7 +575,7 @@ function PublicGuestView() {
                       <span className="text-xs font-semibold text-gray-500">Share Appreciation:</span>
                       <div className="flex gap-1.5">
                         {EMOJI_MAP.map((e) => {
-                          const count = reactions.filter(r => r.emoji_type === e.type).length
+                          const count = reactions.filter((r) => r.emoji_type === e.type).length
                           return (
                             <button
                               key={e.type}
@@ -606,7 +736,6 @@ function AdminView() {
   }
 
   const toggleApproval = async (photoId, currentStatus) => {
-    // Optimistic UI update
     setPhotos((prev) =>
       prev.map((p) => (p.id === photoId ? { ...p, is_approved: !currentStatus } : p))
     )
@@ -625,15 +754,13 @@ function AdminView() {
   const deletePhoto = async (photoId, storagePath) => {
     if (!confirm('Are you sure you want to permanently delete this photo?')) return
 
-    // Optimistic UI removal: immediately hide card and bounding box from Admin view
+    // Immediately hide card and bounding box from Admin view
     setPhotos((prev) => prev.filter((p) => p.id !== photoId))
 
     try {
-      // 1. Clear foreign key dependencies
       await supabase.from('photo_tags').delete().eq('photo_id', photoId)
       await supabase.from('reactions').delete().eq('photo_id', photoId)
 
-      // 2. Delete main database row
       const { error: dbErr } = await supabase.from('photos').delete().eq('id', photoId)
 
       if (dbErr) {
@@ -642,7 +769,6 @@ function AdminView() {
         return
       }
 
-      // 3. Delete raw asset from storage bucket
       if (storagePath) {
         await supabase.storage.from('raw-photos').remove([storagePath])
       }
@@ -702,8 +828,8 @@ function AdminView() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {photos.map((p) => {
-              const imageUrl = p.thumbnail_path.includes('?') 
-                ? `${p.thumbnail_path}&v=${new Date(p.created_at).getTime()}` 
+              const imageUrl = p.thumbnail_path.includes('?')
+                ? `${p.thumbnail_path}&v=${new Date(p.created_at).getTime()}`
                 : `${p.thumbnail_path}?v=${new Date(p.created_at).getTime()}`
 
               return (
@@ -713,6 +839,10 @@ function AdminView() {
                       src={imageUrl}
                       alt="Submission"
                       className="w-full h-48 object-cover"
+                      onError={(e) => {
+                        // Hide broken card container in admin panel if image file is missing
+                        e.target.closest('.bg-white').style.display = 'none'
+                      }}
                     />
                     <div className="p-4">
                       <p className="font-bold text-[#0C6285]">{p.uploader_name || 'Anonymous'}</p>
