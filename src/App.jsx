@@ -315,26 +315,4 @@ function PublicGuestView() {
             <ShieldCheck className="w-3.5 h-3.5" /> Admin Portal
           </a>
         </div>
-      </header>
-
-      {/* Upload Form */}
-      <main className="w-full max-w-2xl bg-white rounded-2xl shadow-lg border border-amber-200/60 p-6 sm:p-8 mb-10">
-        <h2 className="text-xl font-bold text-[#0C6285] mb-2 flex items-center gap-2">
-          <ImageIcon className="w-6 h-6 text-[#D4AF37]" /> Share Your Celebration Photos
-        </h2>
-        <p className="text-sm text-gray-600 mb-6">
-          Upload photos from your camera roll and tag them so everyone can find and enjoy them!
-        </p>
-
-        <form onSubmit={handleUpload} className="space-y-6">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm font-bold text-gray-700">Select Photos</label>
-              {selectedFiles.length > 0 && (
-                <button
-                  type="button"
-                  onClick={handleClearSelection}
-                  className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-1 cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" /> Clear Selection
-                </button
+      </
