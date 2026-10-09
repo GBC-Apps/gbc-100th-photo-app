@@ -394,8 +394,7 @@ function PublicGuestView() {
               value={customTag}
               onChange={(e) => setCustomTag(e.target.value)}
               placeholder="Add custom tag (e.g. #Hondo, #Kinnara, #Gagaku)"
-              className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0C6285]"
-            />
+              className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#0C6285]"            />
           </div>
 
           <div>
@@ -420,7 +419,7 @@ function PublicGuestView() {
             <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex items-center gap-3">
               <CheckCircle className="w-6 h-6 text-emerald-600 shrink-0" />
               <div>
-                <p className="font-bold">Namu Amida Butsu! Thank you!</p>
+                <p className="font-bold">Thank you for sharing!</p>
                 <p className="text-xs text-emerald-700">Your photos have been added to the Centennial collection.</p>
               </div>
             </div>
