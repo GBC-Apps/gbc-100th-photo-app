@@ -750,7 +750,7 @@ function AdminView() {
   if (!confirm('Are you sure you want to permanently delete this photo?')) return
 
   try {
-    // 1. Remove related database dependencies
+    // 1. Remove related database dependencies 
     await supabase.from('photo_tags').delete().eq('photo_id', photoId)
     await supabase.from('reactions').delete().eq('photo_id', photoId)
 
