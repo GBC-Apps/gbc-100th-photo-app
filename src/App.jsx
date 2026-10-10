@@ -80,13 +80,14 @@ function PublicGuestView() {
   const [progress, setProgress] = useState('')
   const [success, setSuccess] = useState(false)
 
-  // Feed, Filter, Search, and Sort State
+  // Feed, Filter, Search, Sort & Lightbox State
   const [photos, setPhotos] = useState([])
   const [activeFilterTag, setActiveFilterTag] = useState('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState('NEWEST')
   const [loadingPhotos, setLoadingPhotos] = useState(true)
   const [brokenImageIds, setBrokenImageIds] = useState(new Set())
+  const [activeLightboxImage, setActiveLightboxImage] = useState(null)
 
   useEffect(() => {
     fetchPhotos()
@@ -120,6 +121,11 @@ function PublicGuestView() {
 
       if (photosData) {
         setPhotos(photosData)
+        // Keep active lightbox reactions in sync if lightbox is open
+        if (activeLightboxImage) {
+          const updatedLightbox = photosData.find((p) => p.id === activeLightboxImage.id)
+          if (updatedLightbox) setActiveLightboxImage(updatedLightbox)
+        }
       }
     } catch (err) {
       console.error('Error fetching gallery:', err)
@@ -454,7 +460,7 @@ function PublicGuestView() {
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-2.5 text-xs text-gray-400 hover:text-gray-600 font-bold"
+                className="absolute right-3 top-2.5 text-xs text-gray-400 hover:text-gray-600 font-bold cursor-pointer"
               >
                 ✕
               </button>
@@ -536,8 +542,9 @@ function PublicGuestView() {
                   <img
                     src={imageUrl}
                     alt="Centennial Celebration"
-                    className="w-full max-h-[450px] object-cover"
+                    className="w-full max-h-[450px] object-cover cursor-pointer hover:opacity-95 transition-opacity"
                     loading="lazy"
+                    onClick={() => setActiveLightboxImage(p)}
                     onError={() => {
                       setBrokenImageIds((prev) => new Set(prev).add(p.id))
                     }}
@@ -592,6 +599,80 @@ function PublicGuestView() {
           </div>
         )}
       </section>
+
+      {/* Lightbox Modal with Interactive Emoji Appreciation */}
+      {activeLightboxImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 cursor-pointer"
+          onClick={() => setActiveLightboxImage(null)}
+        >
+          <div
+            className="relative max-w-4xl max-h-[92vh] w-full flex flex-col items-center justify-center cursor-default bg-[#0C6285]/90 border border-[#D4AF37]/40 rounded-2xl p-4 sm:p-6 shadow-2xl overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setActiveLightboxImage(null)}
+              className="absolute top-4 right-4 text-white bg-white/20 hover:bg-white/40 p-2 rounded-full cursor-pointer text-sm font-bold flex items-center gap-1 transition-colors"
+            >
+              <X className="w-5 h-5" /> Close
+            </button>
+
+            <img
+              src={
+                activeLightboxImage.thumbnail_path.includes('?')
+                  ? `${activeLightboxImage.thumbnail_path}&v=${new Date(activeLightboxImage.created_at).getTime()}`
+                  : `${activeLightboxImage.thumbnail_path}?v=${new Date(activeLightboxImage.created_at).getTime()}`
+              }
+              alt="Expanded Centennial Photo"
+              className="max-w-full max-h-[65vh] object-contain rounded-xl shadow-2xl mb-4"
+            />
+
+            <div className="w-full text-center text-white border-t border-cyan-800/80 pt-4">
+              <p className="font-bold text-xl text-[#D4AF37]">
+                {activeLightboxImage.uploader_name || 'Sangha Member'}
+              </p>
+              <p className="text-xs text-cyan-200 mt-0.5">
+                Uploaded at {new Date(activeLightboxImage.created_at).toLocaleString()}
+              </p>
+
+              {activeLightboxImage.photo_tags && activeLightboxImage.photo_tags.length > 0 && (
+                <div className="flex flex-wrap justify-center gap-1.5 mt-3">
+                  {activeLightboxImage.photo_tags.map((pt, idx) => (
+                    <span
+                      key={idx}
+                      className="text-xs bg-[#FDF7E7]/20 border border-[#D4AF37]/60 text-[#D4AF37] px-3 py-1 rounded-md font-semibold"
+                    >
+                      #{pt.tags?.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Lightbox Emoji Reactions */}
+              <div className="mt-4 pt-3 border-t border-cyan-800/60 flex flex-col items-center gap-2">
+                <span className="text-xs font-semibold text-cyan-100">Share Appreciation:</span>
+                <div className="flex gap-2">
+                  {EMOJI_MAP.map((e) => {
+                    const reactions = activeLightboxImage.reactions || []
+                    const count = reactions.filter((r) => r.emoji_type === e.type).length
+                    return (
+                      <button
+                        key={e.type}
+                        onClick={() => handleAddReaction(activeLightboxImage.id, e.type)}
+                        className="px-3 py-2 rounded-xl bg-white text-gray-800 hover:bg-amber-100 border border-[#D4AF37] text-base flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
+                        title={e.label}
+                      >
+                        <span>{e.symbol}</span>
+                        {count > 0 && <span className="text-xs font-bold text-[#0C6285]">{count}</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="mt-8 text-center text-xs text-gray-500">
         Gardena Buddhist Church 100th Anniversary • October 18, 2026
@@ -747,32 +828,30 @@ function AdminView() {
   }
 
   const deletePhoto = async (photoId, storagePath) => {
-  if (!confirm('Are you sure you want to permanently delete this photo?')) return
+    if (!confirm('Are you sure you want to permanently delete this photo?')) return
 
-  try {
-    // 1. Remove related database dependencies 
-    await supabase.from('photo_tags').delete().eq('photo_id', photoId)
-    await supabase.from('reactions').delete().eq('photo_id', photoId)
-
-    // 2. Delete the row from the photos database table
-    const { error: dbErr } = await supabase.from('photos').delete().eq('id', photoId)
-
-    if (dbErr) {
-      alert(`Database delete failed: ${dbErr.message}`)
-      return
-    }
-
-    // 3. Delete the file from Supabase storage
-    if (storagePath) {
-      await supabase.storage.from('raw-photos').remove([storagePath])
-    }
-
-    // 4. Update UI state only after successful database deletion
     setPhotos((prev) => prev.filter((p) => p.id !== photoId))
-  } catch (err) {
-    console.error('Delete Error:', err)
+
+    try {
+      await supabase.from('photo_tags').delete().eq('photo_id', photoId)
+      await supabase.from('reactions').delete().eq('photo_id', photoId)
+
+      const { error: dbErr } = await supabase.from('photos').delete().eq('id', photoId)
+
+      if (dbErr) {
+        alert(`Database delete error: ${dbErr.message}`)
+        fetchAdminPhotos()
+        return
+      }
+
+      if (storagePath) {
+        await supabase.storage.from('raw-photos').remove([storagePath])
+      }
+    } catch (err) {
+      console.error('Full Delete Error:', err)
+      fetchAdminPhotos()
+    }
   }
-} 
 
   if (!isAuthenticated) {
     return (
